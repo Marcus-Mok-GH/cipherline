@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cipherline — Fable 5.1 message-hiding lab</title>
+    <meta
+      name="description"
+      content="Paper-faithful steganography lab: hide a secret in an SVG with Claude Fable 5.1, screenshot it, and ask a fresh model to recover it. Bring Your Own Pollen."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,520;0,9..144,560;1,9..144,520&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <strong>Cipherline</strong>
+          <span>Fable 5.1 steganography lab</span>
+          <a
+            class="pill small"
+            href="https://www.lesswrong.com/posts/WHEQps5PK8LrrcTAb/how-does-fable-5-1-hide-messages-in-images"
+            target="_blank"
+            rel="noopener noreferrer"
+            >paper</a
+          >
+          <a
+            class="pill small"
+            href="https://github.com/Marcus-Mok-GH/cipherline"
+            target="_blank"
+            rel="noopener noreferrer"
+            >source</a
+          >
+        </div>
+        <div class="auth">
+          <input
+            id="apiKey"
+            type="password"
+            autocomplete="off"
+            placeholder="Paste Pollen key (sk_…) or Connect"
+          />
+          <button id="btnConnect" class="ghost" type="button">Connect with Pollen</button>
+          <button id="btnDisconnect" class="ghost" type="button">Disconnect</button>
+          <span id="keyHint" class="small muted mono"></span>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div>
+          <h1>Hide a message in a picture. Ask another model if it can find it.</h1>
+          <p>
+            Cipherline re-runs the Fable 5.1 experiment from the LessWrong paper: a hider
+            encodes a secret into SVG using only visual structure, you take a screenshot
+            (optional JPEG loss), and a seeker recovers it from the bitmap alone. Offline
+            tools classify the five scheme families the paper describes.
+          </p>
+          <div class="row">
+            <button class="btn" id="btnTryDemo" type="button">Try a live demo</button>
+            <button class="btn secondary" id="btnOpenGuide" type="button">Read the paper</button>
+          </div>
+        </div>
+        <div class="skyline" id="skyline" aria-hidden="true">
+          <div class="moon"></div>
+        </div>
+      </section>
+
+      <nav class="tabs" id="tabs" aria-label="Cipherline sections">
+        <button class="active" data-tab="lab" type="button">Lab</button>
+        <button data-tab="schemes" type="button">Scheme detection</button>
+        <button data-tab="offline" type="button">Offline demo</button>
+        <button data-tab="about" type="button">About</button>
+      </nav>
+
+      <section class="panel" id="tab-lab">
+        <h3>Experiment: hider → screenshot → seeker</h3>
+        <div class="grid">
+          <div class="stack">
+            <label for="secret">Secret message</label>
+            <textarea id="secret" maxlength="80"></textarea>
+            <div class="row">
+              <select id="presets" aria-label="Model pair">
+                <option value="fable">Claude Fable 5.1 (paper)</option>
+                <option value="astra">GPT-6 Astra</option>
+                <option value="cross">Fable hides → Astra seeks</option>
+                <option value="free">Free duel (GPT-5.4)</option>
+              </select>
+              <button id="btnSample" class="secondary" type="button">Sample secret</button>
+            </div>
+            <label class="check">
+              <input type="checkbox" id="jpegLoss" checked />
+              Simulate screenshot loss (JPEG re-encode)
+            </label>
+            <button class="btn" id="btnEncode" type="button">Hide it (generate image)</button>
+            <div class="status" id="encodeStatus"></div>
+          </div>
+          <div class="stack">
+            <label>Image from the hider (rendered screenshot)</label>
+            <div class="frame" id="imgFrame">
+              <span class="placeholder">No image yet</span>
+            </div>
+            <div class="metrics" id="metrics" style="display: none">
+              <div class="metric">
+                <span class="small muted">hider</span>
+                <b class="mono" id="mHider"></b>
+              </div>
+              <div class="metric">
+                <span class="small muted">seeker</span>
+                <b class="mono" id="mSeeker"></b>
+              </div>
+              <div class="metric">
+                <span class="small muted">verdict</span>
+                <b id="mVerdict"></b>
+              </div>
+              <div class="metric">
+                <span class="small muted">similarity</span>
+                <b id="mSim"></b>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="stack">
+          <div class="row" style="justify-content: space-between">
+            <label style="margin: 0">Seeker output</label>
+            <span class="pill teal" id="schemePill">scheme: —</span>
+          </div>
+          <div class="log mono" id="seekerLog"></div>
+        </div>
+        <div class="row" style="margin-top: 1rem">
+          <button class="btn secondary" id="btnCopySvg" type="button">Copy SVG</button>
+          <button class="btn secondary" id="btnDownload" type="button">Download PNG</button>
+          <button class="btn secondary" id="btnRerun" type="button">Rerun</button>
+          <button class="btn secondary" id="btnClear" type="button">Clear</button>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="tab-schemes">
+        <h3>What scheme was used?</h3>
+        <p class="muted small">
+          Offline height-family detection for skyline SVGs, plus the five families from the
+          paper. Model-drawn images confess their family in the Lab after generation.
+        </p>
+        <div class="grid">
+          <div class="stack">
+            <label for="schemeSvg">Paste an SVG</label>
+            <textarea id="schemeSvg" placeholder="&lt;svg …&gt;…&lt;/svg&gt;"></textarea>
+            <button class="btn" id="btnDetect" type="button">Detect scheme</button>
+          </div>
+          <div class="stack">
+            <label>Classification</label>
+            <div class="log mono" id="schemeLog"></div>
+          </div>
+        </div>
+        <div class="stack">
+          <label>Five scheme families</label>
+          <div class="log mono" id="familiesLog"></div>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="tab-offline">
+        <h3>Offline height-encoding demo</h3>
+        <p class="muted small">
+          Encodes letters as building heights (A=1 … Z=26), the family Fable used in 33/50
+          paper images. No model call — fully deterministic, survives screenshots.
+        </p>
+        <div class="grid">
+          <div class="stack">
+            <label for="offSecret">Secret (letters and spaces)</label>
+            <input id="offSecret" value="HELLO" />
+            <button class="btn" id="btnOffEncode" type="button">Build skyline SVG</button>
+          </div>
+          <div class="stack">
+            <label>Detection</label>
+            <div class="pill ok" id="offVerdict">scheme: height</div>
+          </div>
+        </div>
+        <div class="stack">
+          <label>Rendered encoding → decoded text</label>
+          <div class="gallery">
+            <div class="frame" id="offFrameIn"><span class="placeholder">build one</span></div>
+            <div class="frame" id="offFrameOut"><span class="placeholder">decoded text</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="tab-about">
+        <h3>About</h3>
+        <p class="muted">
+          Cipherline is a live recreation of
+          <a
+            href="https://www.lesswrong.com/posts/WHEQps5PK8LrrcTAb/how-does-fable-5-1-hide-messages-in-images"
+            target="_blank"
+            rel="noopener noreferrer"
+            >How does Fable 5.1 hide messages in images?</a
+          >
+          — including the paper’s exact hide/seek prompts and ≥90% similarity grading.
+        </p>
+        <p class="muted">
+          <strong>BYOP:</strong> you pay with your own Pollen. Cipherline stores the key only
+          in this browser tab’s session storage and never forwards it elsewhere.
+        </p>
+        <p class="muted">
+          Built for Pollinations community quest
+          <a
+            href="https://github.com/pollinations/pollinations/issues/18367"
+            target="_blank"
+            rel="noopener noreferrer"
+            >#18367</a
+          >.
+        </p>
+        <p style="margin-top: 1rem">
+          <a href="https://pollinations.ai/?ref=badge">
+            <img
+              src="https://raw.githubusercontent.com/pollinations/pollinations/main/packages/ui/src/brand/badge-made-with.svg"
+              alt="Made with pollinations.ai"
+              height="28"
+            />
+          </a>
+        </p>
+      </section>
+
+      <footer class="footnote">
+        Cipherline · paper threshold 90% normalized similarity ·
+        <a
+          href="https://github.com/Marcus-Mok-GH/cipherline"
+          target="_blank"
+          rel="noopener noreferrer"
+          >source</a
+        >
+        ·
+        <a href="https://pollinations.ai/?ref=badge">pollinations.ai</a>
+      </footer>
+    </div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
